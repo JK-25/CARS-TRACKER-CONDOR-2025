@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Трекер машин — Рейсы и возвращение в гараж</title>
+  <style>
+    :root {
+      --bg: #0f172a; /* slate-900 */
+      --panel: #111827; /* gray-900 */
+      --muted: #1f2937; /* gray-800 */
+      --text: #e5e7eb; /* gray-200 */
+      --text-dim: #9ca3af; /* gray-400 */
+      --acc: #22c55e; /* green-500 */
+      --acc-2: #3b82f6; /* blue-500 */
+      --warn: #f59e0b; /* amber-500 */
+      --danger: #ef4444; /* red-500 */
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+      --radius: 16px;
+    }
+    html, body { height: 100%; }
+    body {
+      margin: 0; background: radial-gradient(1200px 800px at 10% -10%, #1f2937 0%, var(--bg) 40%), var(--bg); 
+      color: var(--text); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      -webkit-font-smoothing: antialiased; line-height: 1.4;
+    }
+    .container { max-width: 1100px; margin: 24px auto; padding: 0 16px; }
+    header { display:flex; gap:16px; align-items:center; justify-content:space-between; margin-bottom: 18px; }
+    h1 { font-size: clamp(20px, 3vw, 28px); margin: 0; letter-spacing: .3px; }
+    .sub { color: var(--text-dim); font-size: 13px; }
+    .grid { display:grid; grid-template-columns: 1.15fr .85fr; gap:18px; }
+    @media (max-width: 900px){ .grid { grid-template-columns: 1fr; } }
+
+    .card { background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01));
+            border: 1px solid rgba(255,255,255,.08); padding: 16px; border-radius: var(--radius);
+            box-shadow: var(--shadow); }
+    .card h2 { margin: 0 0 10px 0; font-size: 18px; }
+    .row { display:flex; gap:10px; }
+    .row.wrap { flex-wrap: wrap; }
+
+    label { display:block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; }
+    input[type="text"], select, input[type="search"] {
+      width: 100%; border-radius: 12px; border: 1px solid rgba(255,255,255,.08);
+      padding: 10px 12px; background: var(--muted); color: var(--text);
+      outline: none; box-shadow: inset 0 1px 0 rgba(255,255,255,.06);
+    }
+    textarea { width:100%; min-height: 86px; border-radius: 12px; border: 1px solid rgba(255,255,255,.08);
+      padding: 10px 12px; background: var(--muted); color: var(--text); outline: none; resize: vertical; }
+
+    .btn { display:inline-flex; align-items:center; justify-content:center; gap:8px;
+      border: 1px solid rgba(255,255,255,.08); color: #fff; padding: 10px 14px; background: #0b1220;
+      border-radius: 12px; cursor:pointer; user-select:none; text-decoration:none; transition:.2s; }
+    .btn:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(0,0,0,.35); }
+    .btn.primary { background: linear-gradient(180deg, #10b981, #059669); border-color: transparent; }
+    .btn.blue { background: linear-gradient(180deg, #3b82f6, #2563eb); border-color: transparent; }
+    .btn.ghost { background: transparent; }
+    .btn.warn { background: linear-gradient(180deg, #f59e0b, #d97706); border-color: transparent; }
+    .btn.danger { background: linear-gradient(180deg, #ef4444, #dc2626); border-color: transparent; }
+
+    .tablewrap { overflow:auto; border-radius: 12px; border:1px solid rgba(255,255,255,.08); }
+    table { width:100%; border-collapse: collapse; background: #0b1220; }
+    th, td { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,.06); font-size: 13px; }
+    th { text-align:left; color: var(--text-dim); position: sticky; top:0; background:#0b1220; }
+    tr:hover td { background: rgba(255,255,255,.02); }
+    .pill { display:inline-block; padding:3px 8px; border-radius:999px; font-size:12px; }
+    .pill.live { background: rgba(34, 197, 94, .15); color: #86efac; }
+    .pill.done { background: rgba(59, 130, 246,.15); color:#93c5fd; }
+
+    .empty { color: var(--text-dim); font-size: 14px; padding: 8px 0 2px; }
+    .footer { color: var(--text-dim); font-size:12px; margin-top: 12px; }
+    .spacer { height: 8px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>Трекер машин</h1>
+        <div class="sub">Выберите машину, укажите направление/маршрут, фиксируйте выезд и возвращение в гараж. Данные сохраняются в браузере и доступны для выгрузки в файл.</div>
+      </div>
+      <div class="row">
+        <button id="exportCsvBtn" class="btn blue" title="Скачать CSV">Экспорт CSV</button>
+        <button id="exportJsonBtn" class="btn ghost" title="Скачать JSON">JSON</button>
+        <button id="resetBtn" class="btn danger" title="Очистить всё (внимание)">Сброс</button>
+      </div>
+    </header>
+
+    <div class="grid">
+      <section class="card">
+        <h2>Новый выезд</h2>
+        <div class="row wrap">
+          <div style="flex:1 1 220px; min-width:220px">
+            <label for="vehicleSelect">Машина</label>
+            <div class="row">
+              <select id="vehicleSelect" style="flex:1"></select>
+              <button id="addVehicleBtn" class="btn" title="Добавить новую машину">＋</button>
+            </div>
+          </div>
+          <div style="flex:1 1 200px; min-width:200px">
+            <label for="direction">Направление (куда)</label>
+            <input id="direction" type="text" placeholder="на УППГ-3 / на склад / в город" />
+          </div>
+        </div>
+        <div class="spacer"></div>
+        <label for="route">Маршрут / описание</label>
+        <textarea id="route" placeholder="краткое описание маршрута, задача, ФИО ответственного и т.д."></textarea>
+        <div class="spacer"></div>
+        <div class="row">
+          <button id="dispatchBtn" class="btn primary">Отправить в рейс</button>
+          <button id="clearFormBtn" class="btn ghost">Очистить</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Сейчас в рейсе</h2>
+        <div id="activeList"></div>
+        <div class="empty" id="activeEmpty" style="display:none">Нет активных рейсов.</div>
+      </section>
+    </div>
+
+    <section class="card" style="margin-top:18px">
+      <div class="row" style="justify-content:space-between; align-items:center; gap:10px;">
+        <h2 style="margin:0">Журнал рейсов</h2>
+        <input id="searchInput" type="search" placeholder="Поиск по машине/направлению/маршруту..." style="max-width:360px" />
+      </div>
+      <div class="tablewrap" style="margin-top:10px;">
+        <table id="logTable">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Машина</th>
+              <th>Направление</th>
+              <th>Маршрут / описание</th>
+              <th>Выезд</th>
+              <th>Возврат</th>
+              <th>Статус</th>
+              <th>Действия</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="footer">Время фиксируется по вашему локальному времени (таймзона браузера). Формат можно изменить в коде в функции <code>fmt()</code>.</div>
+    </section>
+  </div>
+
+  <script>
+    // ======= Простая БД в localStorage =======
+    const LS_KEYS = {
+      vehicles: 'fleetVehiclesV1',
+      logs: 'fleetLogsV1'
+    };
+    const state = {
+      vehicles: [], // ["Газель А123ВС", "Прадо 90", ...]
+      logs: [] // [{id, vehicle, direction, route, departAt, returnAt, status}]
+    };
+
+    // ======= Утилиты времени/ид =======
+    function nowIso(){ return new Date().toISOString(); }
+    function fmt(iso){
+      if(!iso) return '';
+      const d = new Date(iso);
+      return d.toLocaleString('ru-RU', { hour12:false });
+    }
+    function uid(){ return Math.random().toString(36).slice(2,8) + '-' + Date.now().toString(36).slice(-6); }
+
+    // ======= Загрузка/сохранение =======
+    function load(){
+      try {
+        const v = JSON.parse(localStorage.getItem(LS_KEYS.vehicles) || '[]');
+        const l = JSON.parse(localStorage.getItem(LS_KEYS.logs) || '[]');
+        state.vehicles = Array.isArray(v) && v.length ? v : [
+          'Газель A123BC', 'Toyota Prado 2.7', 'ISUZU NPR', 'Chevrolet Cobalt', 'УАЗ-3909'
+        ];
+        state.logs = Array.isArray(l) ? l : [];
+      } catch(e){ console.error(e); }
+    }
+    function save(){
+      localStorage.setItem(LS_KEYS.vehicles, JSON.stringify(state.vehicles));
+      localStorage.setItem(LS_KEYS.logs, JSON.stringify(state.logs));
+      render();
+    }
+
+    // ======= Рендер =======
+    const vehicleSelect = document.getElementById('vehicleSelect');
+    const activeList = document.getElementById('activeList');
+    const activeEmpty = document.getElementById('activeEmpty');
+    const logTableBody = document.querySelector('#logTable tbody');
+    const searchInput = document.getElementById('searchInput');
+
+    function renderVehicles(){
+      vehicleSelect.innerHTML = '';
+      state.vehicles.forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = opt.textContent = v; vehicleSelect.appendChild(opt);
+      });
+    }
+
+    function renderActive(){
+      activeList.innerHTML = '';
+      const active = state.logs.filter(x => x.status === 'В рейсе');
+      activeEmpty.style.display = active.length ? 'none' : '';
+      active.forEach(x => {
+        const wrap = document.createElement('div');
+        wrap.className = 'card';
+        wrap.style.padding = '12px';
+        wrap.style.marginBottom = '10px';
+        wrap.innerHTML = `
+          <div style="display:flex; justify-content:space-between; gap:8px; align-items:start;">
+            <div>
+              <div style="font-weight:600; font-size:14px;">${escapeHtml(x.vehicle)} <span class="pill live">в рейсе</span></div>
+              <div class="sub">→ ${escapeHtml(x.direction)}</div>
+              <div style="font-size:12px; color:#cbd5e1; margin-top:4px;">Выезд: ${fmt(x.departAt)}</div>
+              ${x.route ? `<div style="font-size:12px; color:#cbd5e1; margin-top:4px;">Маршрут: ${escapeHtml(x.route)}</div>` : ''}
+            </div>
+            <div class="row" style="gap:8px; align-items:center;">
+              <button class="btn blue" data-action="return" data-id="${x.id}">В гараже</button>
+              <button class="btn ghost" data-action="edit" data-id="${x.id}" title="Изменить направление/маршрут">✎</button>
+              <button class="btn ghost" data-action="delete" data-id="${x.id}" title="Удалить запись">🗑</button>
+            </div>
+          </div>`;
+        activeList.appendChild(wrap);
+      });
+    }
+
+    function renderTable(){
+      const q = (searchInput.value || '').trim().toLowerCase();
+      const rows = [...state.logs]
+        .sort((a,b)=> (b.departAt || '').localeCompare(a.departAt || ''))
+        .filter(x => !q || [x.id, x.vehicle, x.direction, x.route].some(v => (v||'').toLowerCase().includes(q)));
+
+      logTableBody.innerHTML = '';
+      rows.forEach(x => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${x.id}</td>
+          <td>${escapeHtml(x.vehicle)}</td>
+          <td>${escapeHtml(x.direction)}</td>
+          <td>${escapeHtml(x.route||'')}</td>
+          <td>${fmt(x.departAt)}</td>
+          <td>${fmt(x.returnAt)}</td>
+          <td>${x.status === 'В рейсе' ? '<span class="pill live">В рейсе</span>' : '<span class="pill done">В гараже</span>'}</td>
+          <td>
+            ${x.status === 'В рейсе' ? `<button class="btn blue" data-action="return" data-id="${x.id}">В гараже</button>` : ''}
+            <button class="btn ghost" data-action="edit" data-id="${x.id}" title="Редактировать">✎</button>
+            <button class="btn ghost" data-action="delete" data-id="${x.id}" title="Удалить">🗑</button>
+          </td>`;
+        logTableBody.appendChild(tr);
+      });
+    }
+
+    function render(){
+      renderVehicles();
+      renderActive();
+      renderTable();
+    }
+
+    // ======= Действия =======
+    function addVehicleFlow(){
+      const name = prompt('Название/номер машины (например, "Газель A123BC")');
+      if(!name) return;
+      if(state.vehicles.includes(name)) { alert('Такая машина уже есть.'); return; }
+      state.vehicles.push(name);
+      save();
+      vehicleSelect.value = name;
+    }
+
+    function dispatch(){
+      const vehicle = vehicleSelect.value;
+      const direction = document.getElementById('direction').value.trim();
+      const route = document.getElementById('route').value.trim();
+      if(!vehicle){ alert('Выберите машину'); return; }
+      if(!direction){ alert('Укажите направление (куда)'); return; }
+      const item = {
+        id: uid(), vehicle, direction, route,
+        departAt: nowIso(), returnAt: null,
+        status: 'В рейсе'
+      };
+      state.logs.push(item);
+      save();
+      document.getElementById('direction').value = '';
+      document.getElementById('route').value = '';
+    }
+
+    function markReturned(id){
+      const x = state.logs.find(r => r.id === id);
+      if(!x) return;
+      if(x.status !== 'В рейсе'){ alert('Запись уже закрыта.'); return; }
+      x.returnAt = nowIso();
+      x.status = 'В гараже';
+      save();
+    }
+
+    function editRecord(id){
+      const x = state.logs.find(r => r.id === id);
+      if(!x) return;
+      const nd = prompt('Новое направление', x.direction || '');
+      if(nd === null) return; // отмена
+      const nr = prompt('Новый маршрут/описание', x.route || '');
+      if(nr === null) return;
+      x.direction = nd.trim();
+      x.route = nr.trim();
+      save();
+    }
+
+    function deleteRecord(id){
+      if(!confirm('Удалить запись?')) return;
+      const idx = state.logs.findIndex(r => r.id === id);
+      if(idx >= 0){ state.logs.splice(idx,1); save(); }
+    }
+
+    function resetAll(){
+      if(!confirm('Полная очистка базы? Это действие необратимо.')) return;
+      state.logs = [];
+      save();
+    }
+
+    // ======= Экспорт файлов =======
+    function toCsv(){
+      const headers = ['id','машина','направление','маршрут','выезд','возврат','статус'];
+      const rows = state.logs.map(x => [
+        x.id,
+        safeCsv(x.vehicle),
+        safeCsv(x.direction),
+        safeCsv(x.route||''),
+        fmt(x.departAt),
+        fmt(x.returnAt),
+        x.status
+      ].join(','));
+      return [headers.join(','), ...rows].join('\n');
+    }
+    function safeCsv(s){ return '"' + String(s||'').replaceAll('"','""') + '"'; }
+
+    function download(filename, content, mime){
+      const blob = new Blob([content], {type: mime});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename; a.click();
+      setTimeout(()=> URL.revokeObjectURL(url), 5000);
+    }
+
+    // ======= Безопасный HTML =======
+    function escapeHtml(s){
+      return String(s||'')
+        .replaceAll('&','&amp;')
+        .replaceAll('<','&lt;')
+        .replaceAll('>','&gt;')
+        .replaceAll('"','&quot;')
+        .replaceAll('\'','&#39;');
+    }
+
+    // ======= Слушатели =======
+    document.getElementById('addVehicleBtn').addEventListener('click', addVehicleFlow);
+    document.getElementById('dispatchBtn').addEventListener('click', dispatch);
+    document.getElementById('clearFormBtn').addEventListener('click', ()=>{
+      document.getElementById('direction').value = '';
+      document.getElementById('route').value = '';
+    });
+    document.getElementById('resetBtn').addEventListener('click', resetAll);
+    document.getElementById('exportCsvBtn').addEventListener('click', ()=> download(`fleet-log-${new Date().toISOString().slice(0,10)}.csv`, toCsv(), 'text/csv'));
+    document.getElementById('exportJsonBtn').addEventListener('click', ()=> download(`fleet-log-${new Date().toISOString().slice(0,10)}.json`, JSON.stringify(state.logs, null, 2), 'application/json'));
+
+    activeList.addEventListener('click', (e)=>{
+      const btn = e.target.closest('button[data-action]'); if(!btn) return;
+      const id = btn.getAttribute('data-id');
+      const action = btn.getAttribute('data-action');
+      if(action === 'return') markReturned(id);
+      if(action === 'edit') editRecord(id);
+      if(action === 'delete') deleteRecord(id);
+    });
+
+    logTableBody.addEventListener('click', (e)=>{
+      const btn = e.target.closest('button[data-action]'); if(!btn) return;
+      const id = btn.getAttribute('data-id');
+      const action = btn.getAttribute('data-action');
+      if(action === 'return') markReturned(id);
+      if(action === 'edit') editRecord(id);
+      if(action === 'delete') deleteRecord(id);
+    });
+
+    searchInput.addEventListener('input', renderTable);
+
+    // ======= Старт =======
+    load();
+    render();
+  </script>
+</body>
+</html>
